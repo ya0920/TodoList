@@ -9,223 +9,245 @@
     <!-- 筛选与批量操作栏 -->
     <div class="toolbar">
       <!-- 分类筛选 -->
-      <select v-model="selectedCategory" class="category-select">
-        <option value="all">全部分类</option>
-        <option value="工作">工作</option>
-        <option value="学习">学习</option>
-        <option value="生活">生活</option>
-        <option value="其他">其他</option>
-      </select>
+      <div class="category-select-wrapper">
+        <select class="category-select" v-model="selectedCategory">
+          <option value="all">全部分类</option>
+          <option v-for="category in categoryConfig.list" :key="category" :value="category">
+            {{ category }}
+          </option>
+        </select>
+        <img src="@/assets/arrow.svg" alt="下拉箭头" class="select-arrow" />
+      </div>
 
       <!-- 批量操作按钮 -->
       <div class="batch-buttons">
-        <button class="btn btn-success" @click="batchComplete">批量完成</button>
-        <button class="btn btn-warning" @click="batchUncomplete">批量未完成</button>
-        <button class="btn btn-danger" @click="batchDelete">批量删除</button>
+        <button v-if="!isEditing" class="btn btn-primary" @click="enterEditMode">编辑</button>
+        <template v-if="isEditing">
+          <button class="btn btn-success" @click="batchComplete">
+            批量完成 <span class="badge">{{ allCategorySelectedCount }}</span>
+          </button>
+          <button class="btn btn-warning" @click="batchIncomplete">
+            批量未完成 <span class="badge">{{ allCategorySelectedCount }}</span>
+          </button>
+          <button class="btn btn-danger" @click="batchDelete">
+            批量删除 <span class="badge">{{ allCategorySelectedCount }}</span>
+          </button>
+          <button class="btn btn-secondary" @click="exitEditMode">退出编辑</button>
+        </template>
       </div>
     </div>
 
     <!-- 任务列表区域 -->
     <div class="task-section">
       <div class="task-header">
-        <h2 class="task-title">任务列表 ({{ filteredTodos.length }}个任务)</h2>
-        <button class="sort-btn" @click="toggleSortOrder">
+        <h2 class="task-title">任务列表 ({{ filteredTasks.length }}个任务)</h2>
+        <!-- 时间排序 -->
+        <button class="sort-btn">
+          <img src="@/assets/time_up.svg" alt="时间图标" class="sort-icon" />
           <span>时间排序</span>
-          <span :class="isDescending ? 'arrow-down' : 'arrow-up'"></span>
         </button>
       </div>
 
-      <!-- 全选与选中计数 -->
-      <div class="select-all">
-        <input type="checkbox" v-model="isAllSelected" class="select-all-checkbox" />
+      <!-- 全选与选中计数：删除重复的全部分类提示 -->
+      <div v-if="isEditing" class="select-all">
+        <input type="checkbox" class="select-all-checkbox" v-model="selectAll" @change="toggleSelectAll" />
         <label>全选</label>
-        <span class="selected-count">已选 {{ selectedCount }}/{{ filteredTodos.length }}</span>
+        <span class="selected-count">
+          <!-- 只保留“本分类已选”，简洁清晰 -->
+          本分类已选 {{ selectedCount }}/{{ filteredTasks.length }}
+        </span>
       </div>
 
       <!-- 任务列表 -->
       <ul class="task-list">
-        <li 
-          v-for="todo in filteredTodos" 
-          :key="todo.id" 
-          :class="['task-item', { 'completed': todo.status === 'completed' }]"
-        >
-          <input 
-            type="checkbox" 
-            v-model="todo.status" 
-            class="task-checkbox"
-            @change="updateTodo(todo)"
-          />
+        <li v-for="task in filteredTasks" :key="task.id" class="task-item" :class="{ completed: task.completed }">
+          <input type="checkbox" class="task-checkbox" :checked="isEditing ? task.selected : task.completed"
+            @change="toggleTaskSelection(task)" />
           <div class="task-content">
-            <h3 class="task-title">{{ todo.title }}</h3>
-            <p v-if="todo.description" class="task-desc">{{ todo.description }}</p>
+            <h3 class="task-title">{{ task.title }}</h3>
+            <p v-if="task.description" class="task-desc">{{ task.description }}</p>
             <div class="task-meta">
-              <span :class="['category-tag', `tag-${todo.category.toLowerCase()}`]">
-                {{ todo.category }}
+              <span class="category-tag" :style="{ backgroundColor: getCategoryColor(task.category) }">
+                {{ task.category }}
               </span>
-              <span class="task-time">{{ formatTime(todo.createdAt) }}</span>
+              <span class="task-time">{{ task.time }}</span>
             </div>
           </div>
-          <button class="delete-btn" @click="deleteTodo(todo.id)">🗑️</button>
+          <button class="delete-btn" @click="deleteTask(task.id)">
+            <img src="@/assets/delete.svg" alt="删除" class="delete-icon" />
+          </button>
         </li>
       </ul>
     </div>
 
     <!-- 悬浮添加按钮 -->
-    <button class="add-btn" @click="isModalShow = true">+</button>
+    <button class="add-btn" @click="toggleModal">+</button>
 
-    <!-- 引入弹窗组件 -->
-    <TodoModal
-      :is-show="isModalShow"
-      @close="isModalShow = false"
-      @submit="addTodo"
-    />
+    <!-- 弹窗组件 -->
+    <TodoModal v-if="showModal" @close="toggleModal" @add-task="addTask" />
+    <TopNotification :notices="notification.notices.value" @remove="notification.remove" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+// 组件引入
 import TodoModal from './components/TodoModal.vue';
+import TopNotification from './components/TopNotification.vue';
 
-// 分类配置
-const categoryMap = {
-  工作: 'blue',
-  学习: 'green',
-  生活: 'yellow',
-  其他: 'purple'
-};
+// 依赖引入
+import { ref, computed, watch } from 'vue';
+import { categoryConfig } from '@/utils/category';
+import { storageUtils } from '@/utils/storage';
+import { notification } from '@/utils/notification';
+import { taskUtils } from '@/utils/task';
+import { selectionUtils } from '@/utils/selection';
 
-// 响应式数据
-const todos = ref([]); // 所有任务
-const selectedCategory = ref('all'); // 选中的分类
-const isDescending = ref(true); // 时间排序方向（降序）
-const isModalShow = ref(false); // 弹窗显示状态
-const selectedTodos = ref([]); // 选中的任务（用于批量操作）
+// --- 响应式状态定义 ---
+const showModal = ref(false);
+const isEditing = ref(false);
+const selectedCategory = ref('all');
+const selectAll = ref(false);
+const tasks = ref(taskUtils.initTasks());
 
-// 从LocalStorage读取任务
-onMounted(() => {
-  const storedTodos = localStorage.getItem('todoList');
-  if (storedTodos) {
-    todos.value = JSON.parse(storedTodos);
-  }
+// --- 计算属性优化 ---
+const filteredTasks = computed(() => {
+  return taskUtils.filterAndSortTasks(tasks.value, selectedCategory.value);
 });
 
-// 筛选+排序后的任务列表
-const filteredTodos = computed(() => {
-  let result = todos.value;
-  // 按分类筛选
-  if (selectedCategory.value !== 'all') {
-    result = result.filter(todo => todo.category === selectedCategory.value);
-  }
-  // 按状态和时间排序（未完成在前，已完成在后；同状态下按时间排序）
-  result = result.sort((a, b) => {
-    // 一级排序：未完成在前
-    if (a.status === 'pending' && b.status === 'completed') return -1;
-    if (a.status === 'completed' && b.status === 'pending') return 1;
-    // 二级排序：时间排序
-    const timeA = new Date(a.createdAt).getTime();
-    const timeB = new Date(b.createdAt).getTime();
-    return isDescending.value ? (timeB - timeA) : (timeA - timeB);
-  });
-  return result;
-});
-
-// 选中的任务数量
+// 当前分类选中数（编辑模式）/ 当前分类已完成数（普通模式）
 const selectedCount = computed(() => {
-  return filteredTodos.value.filter(todo => todo.status === 'completed').length;
+  if (isEditing.value) {
+    return filteredTasks.value.filter(task => task.selected).length;
+  }
+  return filteredTasks.value.filter(task => task.completed).length;
 });
 
-// 全选状态
-const isAllSelected = computed({
-  get() {
-    return filteredTodos.value.length > 0 && 
-           filteredTodos.value.every(todo => todo.status === 'completed');
+// 全部分类选中数（用于按钮角标）
+const allCategorySelectedCount = computed(() => {
+  return isEditing.value ? tasks.value.filter(task => task.selected).length : 0;
+});
+
+// --- 数据持久化 ---
+watch(
+  tasks,
+  (newTasks) => {
+    const persistTasks = newTasks.map(({ selected, ...rest }) => rest);
+    storageUtils.saveTodos(persistTasks);
   },
-  set(val) {
-    filteredTodos.value.forEach(todo => {
-      todo.status = val ? 'completed' : 'pending';
-      updateTodo(todo);
-    });
+  { deep: true }
+);
+
+// --- 侦听器：同步全选框状态 ---
+watch(
+  [() => filteredTasks.value, isEditing],
+  ([currentFilteredTasks, editing]) => {
+    selectAll.value = selectionUtils.isAllSelected(currentFilteredTasks, editing);
+  },
+  { deep: true }
+);
+
+// --- 编辑模式相关方法 ---
+const enterEditMode = () => {
+  isEditing.value = true;
+  notification.success('进入批量编辑模式，可跨分类勾选任务');
+};
+
+const exitEditMode = () => {
+  isEditing.value = false;
+  tasks.value = taskUtils.resetTaskSelection(tasks.value);
+  selectAll.value = false;
+};
+
+// --- 任务核心操作方法 ---
+const toggleTaskSelection = (task) => {
+  if (isEditing.value) {
+    task.selected = !task.selected;
+  } else {
+    task.completed = !task.completed;
+    notification.success(task.completed ? '任务标记为完成' : '任务标记为未完成');
   }
-});
-
-// 格式化时间
-const formatTime = (timeStr) => {
-  const date = new Date(timeStr);
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  }).replace(/\//g, '-');
 };
 
-// 新增任务
-const addTodo = (newTodo) => {
-  todos.value.push(newTodo);
-  saveToLocalStorage();
+const addTask = (newTask) => {
+  tasks.value.unshift({
+    ...newTask,
+    id: Date.now(),
+    completed: false,
+    selected: false
+  });
+  notification.success('任务添加成功');
+  toggleModal();
 };
 
-// 更新任务（状态变化）
-const updateTodo = (todo) => {
-  saveToLocalStorage();
-};
-
-// 删除任务
-const deleteTodo = (todoId) => {
+const deleteTask = (taskId) => {
   if (confirm('确定删除该任务吗？')) {
-    todos.value = todos.value.filter(todo => todo.id !== todoId);
-    saveToLocalStorage();
+    tasks.value = tasks.value.filter(task => task.id !== taskId);
+    notification.success('任务删除成功');
   }
 };
 
-// 批量完成
+// --- 批量操作方法 ---
+const toggleSelectAll = () => {
+  const targetState = selectAll.value;
+  const tasksToUpdate = filteredTasks.value;
+  const updatedTasks = selectionUtils.toggleAllSelection(tasksToUpdate, targetState, isEditing.value);
+  const updatedTaskIds = new Set(updatedTasks.map(task => task.id));
+
+  tasks.value = tasks.value.map(task => {
+    if (updatedTaskIds.has(task.id)) {
+      return isEditing.value
+        ? { ...task, selected: targetState }
+        : { ...task, completed: targetState };
+    }
+    return task;
+  });
+};
+
 const batchComplete = () => {
-  if (selectedCount.value === 0) {
-    alert('请先选择任务');
+  const totalSelected = allCategorySelectedCount.value;
+  if (totalSelected === 0) {
+    notification.error('请先选择要操作的任务');
     return;
   }
-  filteredTodos.value.forEach(todo => {
-    todo.status = 'completed';
-  });
-  saveToLocalStorage();
+
+  tasks.value = taskUtils.batchUpdateTaskStatus(tasks.value, true);
+  notification.success(`成功标记 ${totalSelected} 个任务为完成`);
+  exitEditMode();
 };
 
-// 批量未完成
-const batchUncomplete = () => {
-  if (selectedCount.value === 0) {
-    alert('请先选择任务');
+const batchIncomplete = () => {
+  const totalSelected = allCategorySelectedCount.value;
+  if (totalSelected === 0) {
+    notification.error('请先选择要操作的任务');
     return;
   }
-  filteredTodos.value.forEach(todo => {
-    todo.status = 'pending';
-  });
-  saveToLocalStorage();
+
+  tasks.value = taskUtils.batchUpdateTaskStatus(tasks.value, false);
+  notification.success(`成功标记 ${totalSelected} 个任务为未完成`);
+  exitEditMode();
 };
 
-// 批量删除
 const batchDelete = () => {
-  if (selectedCount.value === 0) {
-    alert('请先选择任务');
+  const totalSelected = allCategorySelectedCount.value;
+  if (totalSelected === 0) {
+    notification.error('请先选择要删除的任务');
     return;
   }
-  if (confirm(`确定删除选中的 ${selectedCount.value} 个任务吗？`)) {
-    todos.value = todos.value.filter(todo => {
-      return !filteredTodos.value.includes(todo) || todo.status === 'pending';
-    });
-    saveToLocalStorage();
+
+  if (confirm(`确定删除选中的 ${totalSelected} 个任务吗？`)) {
+    tasks.value = taskUtils.batchDeleteSelectedTasks(tasks.value);
+    notification.success(`成功删除 ${totalSelected} 个任务`);
+    exitEditMode();
   }
 };
 
-// 切换时间排序方向
-const toggleSortOrder = () => {
-  isDescending.value = !isDescending.value;
+// --- 辅助方法 ---
+const toggleModal = () => {
+  showModal.value = !showModal.value;
 };
 
-// 保存到LocalStorage
-const saveToLocalStorage = () => {
-  localStorage.setItem('todoList', JSON.stringify(todos.value));
+const getCategoryColor = (category) => {
+  return categoryConfig.getColor(category);
 };
 </script>
 
