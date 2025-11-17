@@ -231,12 +231,12 @@ const saveToLocalStorage = () => {
 
 <style scoped>
 .container {
-  /* max-width: 800px; */
   margin: 0 auto;
-  padding: 100px;
+  padding: 50px 100px;
+  min-height: 100vh;
+  background-color: #f3f4f6;
 }
 
-/* 头部样式 */
 .header {
   text-align: center;
   margin-bottom: 30px;
@@ -253,7 +253,6 @@ const saveToLocalStorage = () => {
   color: #6b7280;
 }
 
-/* 工具栏样式 */
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -261,11 +260,28 @@ const saveToLocalStorage = () => {
   margin-bottom: 20px;
 }
 
+.category-select-wrapper {
+  position: relative;
+  margin-right: 20px;
+}
+
 .category-select {
-  padding: 8px 12px;
+  padding: 8px 30px 8px 12px;
   border: 1px solid #d1d5db;
   border-radius: 4px;
   background-color: #fff;
+  appearance: none;
+  cursor: pointer;
+}
+
+.select-arrow {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
 }
 
 .batch-buttons {
@@ -279,6 +295,11 @@ const saveToLocalStorage = () => {
   border: none;
   cursor: pointer;
   font-size: 14px;
+}
+
+.btn-primary {
+  background-color: #3b82f6;
+  color: #fff;
 }
 
 .btn-success {
@@ -296,12 +317,26 @@ const saveToLocalStorage = () => {
   color: #fff;
 }
 
-/* 任务区域样式 */
-.task-section {
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
   background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 20px;
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.btn-secondary {
+  background-color: #6b7280;
+  color: #fff;
+}
+
+.task-section {
   margin-bottom: 20px;
 }
 
@@ -318,33 +353,21 @@ const saveToLocalStorage = () => {
 }
 
 .sort-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   background: none;
   border: none;
   color: #6b7280;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
   font-size: 14px;
 }
 
-.arrow-down, .arrow-up {
-  display: inline-block;
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
+.sort-icon {
+  width: 14px;
+  height: 14px;
 }
 
-.arrow-down {
-  border-top: 5px solid #6b7280;
-}
-
-.arrow-up {
-  border-bottom: 5px solid #6b7280;
-}
-
-/* 全选区域 */
 .select-all {
   display: flex;
   align-items: center;
@@ -362,24 +385,28 @@ const saveToLocalStorage = () => {
   margin-left: 8px;
 }
 
-/* 任务列表样式 */
 .task-list {
-  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 0;
 }
 
 .task-item {
+  flex: 1 1 calc(50% - 16px);
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 16px;
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 16px;
-  border-bottom: 1px solid #e5e7eb;
 }
 
 .task-item:last-child {
   border-bottom: none;
 }
 
-/* 已完成任务样式 */
 .task-item.completed .task-title {
   text-decoration: line-through;
   color: #6b7280;
@@ -422,22 +449,6 @@ const saveToLocalStorage = () => {
   font-size: 10px;
 }
 
-.tag-工作 {
-  background-color: #2563eb;
-}
-
-.tag-学习 {
-  background-color: #10b981;
-}
-
-.tag-生活 {
-  background-color: #f59e0b;
-}
-
-.tag-其他 {
-  background-color: #9333ea;
-}
-
 .task-time {
   color: #6b7280;
 }
@@ -445,13 +456,15 @@ const saveToLocalStorage = () => {
 .delete-btn {
   background: none;
   border: none;
-  color: #ef4444;
   cursor: pointer;
-  font-size: 16px;
   margin-top: 4px;
 }
 
-/* 悬浮添加按钮 */
+.delete-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .add-btn {
   position: fixed;
   right: 20px;
