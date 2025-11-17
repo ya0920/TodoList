@@ -479,6 +479,10 @@ const getCategoryColor = (category) => {
   border-bottom: none;
 }
 
+.task-item.completed {
+  background-color: #f0f0f0;
+}
+
 .task-item.completed .task-title {
   text-decoration: line-through;
   color: #6b7280;
